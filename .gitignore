@@ -1,0 +1,8 @@
+morticia.sublime-project
+morticia.sublime-workspace
+.DS_Store
+.Python
+bin/
+include/
+lib/
+
