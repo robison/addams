@@ -5,4 +5,4 @@
 
 ## Usage:
 
-python morticia.py -u <username> -p <password>
+python morticia.py -u \<username\> -p \<password\>
