@@ -17,4 +17,6 @@ python morticia.py -u \<username\> -p \<password\>
 
 Any information that's normally encoded via base64 will be recursed as JSON key/value pairs; this provides some semblance of human-readability, and allows the export/transposition of these configurations into other tools such as Selenium.
 
+Built based on Nordstrom's Compuware GPN Splunk plugin - https://github.com/nordstrom/compuware_apm_gpn
+
 Pull requests & feedback welcome.
