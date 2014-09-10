@@ -1,15 +1,15 @@
 # morticia
 
-`morticia` is a Python tool to access, parse, and output a complete, JSON-formatted account configuration from the Gomez Performance Network.
+`morticia` is a Python library to access, parse, and output a complete, JSON-formatted account configuration from the Gomez Performance Network.
 
 
 ## Usage:
 
-python morticia.py -u \<username\> -p \<password\>
+`python pugsley.py -u \<username\> -p \<password\>`
 
 ## Output:
 
-`morticia` output breaks out account information by monitor. Information gathered includes:
+`pugsley` output breaks out account information by monitor. Information gathered includes:
 - Monitor-specific information ("monitor":)
 - Sites being used by the monitor ("sites":)
 - Gomez Script Recorder script being used by the monitor ("script":)
