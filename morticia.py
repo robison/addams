@@ -1,6 +1,6 @@
 """
 morticia.py
-Tool to dump complete config of Gomez Performance Network account
+Main library to interact with Gomez Performance Network API
 This is based on some work done by Nordstrom at
 https://github.com/Nordstrom/compuware_apm_gpn
 """
@@ -12,101 +12,22 @@ import binascii
 import json
 import os
 import sys
-import xml.sax.saxutils
-import xml.dom.minidom
+#import xml.sax.saxutils
+#import xml.dom.minidom
 
-from optparse import OptionParser
 
 try:
     import xmltodict
     from suds.client import Client
     from suds.sudsobject import asdict
 except ImportError:
-    egg_dir = './'
-    for filename in os.listdir(egg_dir):
+    EGG_DIR = './'
+    for filename in os.listdir(EGG_DIR):
         if filename.endswith(".egg"):
-            sys.path.append(egg_dir + filename)
+            sys.path.append(EGG_DIR + filename)
     import xmltodict
     from suds.client import Client
     from suds.sudsobject import asdict
-
-
-def xmlparse(data):
-    """ Converts XML string object to a Python dict """
-    return xmltodict.parse(data,
-                           process_namespaces=False,
-                           attr_prefix='',
-                           item_depth=0)
-
-
-def recursive_asdict(data):
-    """ Convert Suds object into serializable format. """
-    out = {}
-    for key, value in asdict(data).iteritems():
-        if hasattr(value, '__keylist__'):
-            out[key] = recursive_asdict(value)
-        elif isinstance(value, list):
-            out[key] = []
-            for item in value:
-                if hasattr(item, '__keylist__'):
-                    out[key].append(recursive_asdict(item))
-                else:
-                    out[key].append(item)
-        else:
-            out[key] = value
-    return out
-
-
-def recursive_decode(data):
-    """
-    Recursively convert base64-encoded key/value pairs to string, then attempt
-    to json.loads the result to test for additional base64-encoded JSON values
-    """
-
-    if isinstance(data, (int, float, long, complex)):
-        out = str(data)
-    elif isinstance(data, dict):
-        out = {}
-        for key, value in data.iteritems():
-            key = key.decode('utf-8')
-            out[key] = recursive_decode(value)
-    elif isinstance(data, list):
-        out = []
-        for i in data:
-            try:
-                out.append(recursive_decode(i))
-            except UnicodeEncodeError:
-                out.append(i.decode('utf-8'))
-    elif isinstance(data, (str, unicode)):
-        try:
-            out = data.decode('base64', 'strict').encode('utf-8')
-        except (TypeError, ValueError, binascii.Error):
-            out = data.decode('utf-8')
-        else:
-            try:
-                json_data = json.loads(out)
-                out = json_decode(json_data)
-            except (ValueError, AttributeError):
-                pass
-    else:
-        out = data
-    return out
-
-
-def json_decode(data):
-    """
-    Attempts to json.loads() data; if successful, returns either a dict or a
-    list with the values found.
-    """
-    try:
-        out = {}
-        for key, value in data.iteritems():
-            out[key.decode('utf-8')] = recursive_decode(value)
-    except AttributeError:
-        out = []
-        for i in data:
-            out.append(recursive_decode(i))
-    return out
 
 
 class Gpn(Client):
@@ -153,7 +74,7 @@ class Gpn(Client):
         @type __services: list
         """
         if transport:
-            self.soapclient = Client(self.url, transport=None, retxml=True)
+            self.soapclient = Client(self.url, transport=None, retxml=False)
         return self.soapclient.service
 
     def last_sent(self):
@@ -330,105 +251,96 @@ class Alert(Gpn):
             statusType=statustype)
 
 
-def get_monitor_info(login):
-    """ Get all monitor (read: tests) info from Gomez AccountMgmt API """
-    monitor_info = {}
-    monitordata = login.get_account_monitors()
-    monitors = recursive_asdict(monitordata)
-    for i in monitors['MonitorSet']['Monitor']:
-        monitor_info[i['_mid']] = i
-    monitor_info.pop("Status", None)
-    return monitor_info
+class Decode(object):
+    """ Class to handle decodes for other addams tools """
+    @classmethod
+    def recursive_asdict(cls, data):
+        """ Convert Suds object into serializable format. """
+        out = {}
+        for key, value in asdict(data).iteritems():
+            if hasattr(value, '__keylist__'):
+                out[key] = Decode.recursive_asdict(value)
+            elif isinstance(value, list):
+                out[key] = []
+                for item in value:
+                    if hasattr(item, '__keylist__'):
+                        out[key].append(Decode.recursive_asdict(item))
+                    else:
+                        out[key].append(item)
+            else:
+                out[key] = value
+        return out
 
+    @classmethod
+    def recursive_decode(cls, data):
+        """
+        Recursively convert base64-encoded key/value pairs to string, then
+        attempt to json.loads the result to test for additional
+        base64-encoded JSON values
+        """
 
-def get_alert_info(login):
-    """ Get alert info from Gomez AlertManagementService API """
-    alert_info = {}
-    alertdata = login.get_alert_configuration()
-    alerts = recursive_asdict(alertdata)
-    for i in alerts['monitorAlertConfiguration']:
-        alert_info[str(i['_id'])] = i
-    alert_info.pop("Status", None)
-    return alert_info
+        if isinstance(data, (int, float, long, complex)):
+            out = str(data)
+        elif isinstance(data, dict):
+            out = {}
+            for key, value in data.iteritems():
+                key = key.decode('utf-8')
+                out[key] = cls.recursive_decode(value)
+        elif isinstance(data, list):
+            out = []
+            for i in data:
+                try:
+                    out.append(cls.recursive_decode(i))
+                except UnicodeEncodeError:
+                    out.append(i.decode('utf-8'))
+        elif isinstance(data, (str, unicode)):
+            try:
+                out = data.decode('base64', 'strict').encode('utf-8')
+            except (TypeError, ValueError, binascii.Error):
+                out = data.decode('utf-8')
+            else:
+                try:
+                    json_data = json.loads(out)
+                    out = cls.json_decode(json_data)
+                except (ValueError, AttributeError):
+                    pass
+        else:
+            out = data
+        return out
 
+    @classmethod
+    def json_decode(cls, data):
+        """
+        Attempts to json.loads() data; if successful, returns either a
+        dict or a list with the values found.
+        """
+        try:
+            out = {}
+            for key, value in data.iteritems():
+                out[key.decode('utf-8')] = cls.recursive_decode(value)
+        except AttributeError:
+            out = []
+            for i in data:
+                out.append(cls.recursive_decode(i))
+        return out
 
-def get_site_info(login, mid, sites):
-    """ Get info about all sites used by a monitor """
-    site_info = {}
-    sites[mid] = recursive_asdict(login.get_monitor_sites(mid))
-    try:
-        for i in sites[mid]['SiteSet']['Site']:
-            site = {}
-            for key, value in i.iteritems():
-                site[key.encode('utf-8')] = value.encode('utf-8')
-            site_info[i['_sid'].encode('utf-8')] = site
-    except KeyError:
-        pass
-    else:
-        return site_info
+    @staticmethod
+    def json_dumps(data):
+        """
+        Returns json.dumps of data passed to it
+        """
+        assert isinstance(data, (dict, list))
+        return json.dumps(data,
+                          encoding='utf-8',
+                          ensure_ascii=False,
+                          indent=4,
+                          separators=(',', ': '),
+                          sort_keys=True).encode('utf-8')
 
-
-def get_script_info(login, mid, sid):
-    """ Get script info for a monitor/site pair """
-    scripts = {}
-    scripts[mid] = login.get_script(mid, sid)
-    try:
-        script_info = xmlparse(scripts[mid]['ScriptXml'])
-    except TypeError:
-        pass
-    else:
-        return script_info
-
-
-def build_config(username, password):
-    """ Builds account config from Gomez APIs """
-    dataset = {}
-    monitors = get_monitor_info(Account(username, password))
-    alertinfo = get_alert_info(Alert(username, password))
-    for mid in monitors:
-        monitors[mid].pop("Status", None)
-        sites = {}
-        siteinfo = {}
-        scriptinfo = {}
-        if mid not in alertinfo:
-            alertinfo[mid] = {}
-        siteinfo[mid] = get_site_info(Account(username, password), mid, sites)
-        for i in sites:
-            scriptinfo[mid] = get_script_info(Script(username, password),
-                                              mid, i)
-        dataset[mid] = {u'alerts': alertinfo[mid],
-                        u'monitor': monitors[mid],
-                        u'script': scriptinfo[mid],
-                        u'sites': siteinfo[mid]}
-    return dataset
-
-
-def main():
-    """ Main program - command line options, etc """
-    usage = ("usage: %prog [-h|--help] [-u|--username <username>] " +
-             "[-p|--password <password>]")
-    parser = OptionParser(usage=usage, version="%prog 0.1")
-    parser.add_option("-u",
-                      "--username",
-                      type="string",
-                      dest="username",
-                      help="Username")
-    parser.add_option("-p",
-                      "--password",
-                      type="string",
-                      dest="password",
-                      help="Password")
-    (options, args) = parser.parse_args()
-
-    config = build_config(options.username, options.password)
-    config = recursive_decode(config)
-    print json.dumps(config,
-                     encoding='utf-8',
-                     ensure_ascii=False,
-                     indent=4,
-                     separators=(',', ': '),
-                     sort_keys=True).encode('utf-8')
-
-
-if __name__ == '__main__':
-    main()
+    @staticmethod
+    def xmlparse(data):
+        """ Converts XML string object to a Python dict """
+        return xmltodict.parse(data,
+                               process_namespaces=True,
+                               attr_prefix='',
+                               item_depth=0)
