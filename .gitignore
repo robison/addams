@@ -1,5 +1,6 @@
 morticia.sublime-project
 morticia.sublime-workspace
+*.pyc
 .DS_Store
 .Python
 bin/
